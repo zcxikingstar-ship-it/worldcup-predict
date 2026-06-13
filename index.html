@@ -663,8 +663,9 @@ function changeDay(offset) {
   if (offset===0) { currentDateStr=getDateStr(0); }
   else {
     var y=parseInt(currentDateStr.slice(0,4)),m=parseInt(currentDateStr.slice(4,6)),d=parseInt(currentDateStr.slice(6,8));
-    var date=new Date(y,m-1,d); date.setDate(date.getDate()+offset);
-    currentDateStr = date.getFullYear()+("0"+(date.getMonth()+1)).slice(-2)+("0"+date.getDate()).slice(-2);
+    var date = new Date(Date.UTC(y, m-1, d));
+    date.setUTCDate(date.getUTCDate() + offset);
+    currentDateStr = date.getUTCFullYear()+("0"+(date.getUTCMonth()+1)).slice(-2)+("0"+date.getUTCDate()).slice(-2);
   }
   document.getElementById("dayLabel").textContent = getDateDisplay(currentDateStr);
   loadMatches();

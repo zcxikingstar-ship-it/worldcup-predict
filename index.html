@@ -796,7 +796,7 @@ function fetchDeepSeekScores(tA, tB, eloA, eloB, diff, eloW, eloD, eloL, m, live
   var odds = window._currentOdds;
   var scoreInfo = live ? (gA + ":" + gB + "（进行中）") : "";
 
-  fetch("https://localhost:8765/analyze", {
+  fetch("/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

@@ -166,16 +166,6 @@
 
   .odds-sub { font-size:.78rem; color:var(--muted); margin-top:6px; }
   .odds-sub b { color:var(--accent3); }
-
-  /* AI 分析 */
-  .ai-response { font-size:.82rem; line-height:1.65; color:var(--text); white-space:pre-wrap; }
-  .ai-thinking { text-align:center; color:var(--accent3); padding:16px; font-size:.85rem; }
-  .ai-error { color:var(--accent2); font-size:.78rem; text-align:center; padding:8px; }
-  .ai-hint { font-size:.7rem; color:var(--muted); margin-top:8px; text-align:center; line-height:1.5; }
-  .ai-hint code { background:#ffffff12; padding:2px 8px; border-radius:4px; font-size:.7rem; }
-  .ai-btn-row { display:flex; gap:8px; }
-  .ai-btn-row button:first-child { flex:2; }
-  .ai-btn-row button:last-child { flex:1; background:linear-gradient(90deg,#ff5470,#ff7a9c); }
 </style>
 </head>
 <body>
@@ -249,13 +239,9 @@
       </div>
     </div>
 
-    <div class="compare-row" style="flex-wrap:wrap">
-      <div class="compare-col" style="border:1px solid var(--accent);background:#00e5a011">
-        <div class="title">🤖 DeepSeek AI <span id="dsStatus" style="font-size:.6rem;color:var(--accent3)"></span></div>
-        <div class="vals"><span class="w" id="dsW">等待中</span> / <span class="d" id="dsD">—</span> / <span class="l" id="dsL">—</span></div>
-      </div>
+    <div class="compare-row">
       <div class="compare-col">
-        <div class="title">📐 Elo 模型</div>
+        <div class="title">🎯 Elo 模型</div>
         <div class="vals"><span class="w" id="eloW">–</span> / <span class="d" id="eloD">–</span> / <span class="l" id="eloL">–</span></div>
       </div>
       <div class="compare-col">
@@ -715,7 +701,7 @@ function outcome(m) {
   var s=W+D+L; return [W/s,D/s,L/s];
 }
 
-// ===== 渲染（主概率栏 = DeepSeek AI，Elo 兜底）=====
+// ===== 渲染 =====
 function predict() {
   var tA = document.getElementById("teamA").value;
   var tB = document.getElementById("teamB").value;
@@ -753,23 +739,18 @@ function predict() {
 
   var m = scoreMatrix(lamA,lamB,frac,gA,gB);
   var res = outcome(m);
-  var eloW=res[0], eloD=res[1], eloL=res[2];
+  var W=res[0],D=res[1],L=res[2];
 
-  // Elo 模型结果（先展示，DeepSeek 回来后再更新）
-  document.getElementById("eloW").textContent = (eloW*100).toFixed(1)+"%";
-  document.getElementById("eloD").textContent = (eloD*100).toFixed(1)+"%";
-  document.getElementById("eloL").textContent = (eloL*100).toFixed(1)+"%";
-
-  // 初始状态：主概率栏先显示 Elo
-  setBar("A", eloW); setBar("D", eloD); setBar("B", eloL);
+  setBar("A",W); setBar("D",D); setBar("B",L);
   document.getElementById("lblA").textContent = nameA+" 胜";
   document.getElementById("lblB").textContent = nameB+" 胜";
-  document.getElementById("dsW").textContent = "加载中...";
-  document.getElementById("dsD").textContent = "—";
-  document.getElementById("dsL").textContent = "—";
-  document.getElementById("dsStatus").textContent = " ⏳";
 
-  // ESPN 赔率
+  // Elo 模型结果
+  document.getElementById("eloW").textContent = (W*100).toFixed(1)+"%";
+  document.getElementById("eloD").textContent = (D*100).toFixed(1)+"%";
+  document.getElementById("eloL").textContent = (L*100).toFixed(1)+"%";
+
+  // ESPN 赔率隐含概率
   var odds = window._currentOdds;
   if (odds && odds.home && odds.draw && odds.away) {
     var implied = oddsToImpliedProb(odds.home, odds.draw, odds.away);
@@ -783,95 +764,20 @@ function predict() {
       document.getElementById("oddsL").textContent = "—";
     }
   } else {
-    document.getElementById("oddsW").textContent = "无";
-    document.getElementById("oddsD").textContent = "无";
-    document.getElementById("oddsL").textContent = "无";
+    document.getElementById("oddsW").textContent = "无数据";
+    document.getElementById("oddsD").textContent = "无数据";
+    document.getElementById("oddsL").textContent = "无数据";
   }
 
-  window._lastModelProbs = { W: eloW, D: eloD, L: eloL, matrix: m };
+  // 存储模型概率并更新赔率面板
+  window._lastModelProbs = { W: W, D: D, L: L, matrix: m };
   document.getElementById("oddLabelH").textContent = nameA + "胜";
   document.getElementById("oddLabelA").textContent = nameB + "胜";
   renderOddsPanel();
+
   renderHeat(m);
   renderTop(m);
   renderEvo(lamA,lamB,gA,gB,live);
-
-  // 调用 DeepSeek AI 获取预测
-  callDeepSeekPredict(tA, tB, eloA, eloB, diff, eloW, eloD, eloL, lamA, lamB, m, frac, gA, gB, live, nameA, nameB);
-}
-
-function callDeepSeekPredict(tA, tB, eloA, eloB, diff, eloW, eloD, eloL, lamA, lamB, m, frac, gA, gB, live, nameA, nameB) {
-  // 收集 Elo 最可能比分
-  var scores = [];
-  for (var a = 0; a <= MAXG; a++) for (var b = 0; b <= MAXG; b++) {
-    scores.push({ score: a + ":" + b, prob: m[a][b] });
-  }
-  scores.sort(function(x, y) { return y.prob - x.prob; });
-  var topScores = scores.slice(0, 5).map(function(s) {
-    return { score: s.score, prob: (s.prob * 100).toFixed(1) };
-  });
-
-  var odds = window._currentOdds;
-  var scoreInfo = "";
-  if (live) { scoreInfo = gA + ":" + gB + "（进行中）"; }
-
-  var payload = {
-    home: tA, away: tB,
-    eloHome: eloA, eloAway: eloB, eloDiff: diff,
-    modelW: (eloW * 100).toFixed(1), modelD: (eloD * 100).toFixed(1), modelL: (eloL * 100).toFixed(1),
-    oddsHome: odds && odds.home ? odds.home : "无",
-    oddsDraw: odds && odds.draw ? odds.draw : "无",
-    oddsAway: odds && odds.away ? odds.away : "无",
-    topScores: topScores,
-    status: live ? "live" : "pre",
-    scoreInfo: scoreInfo
-  };
-
-  fetch("http://localhost:8765/analyze", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  })
-  .then(function(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-  .then(function(data) {
-    if (!data.ok || !data.dsWin) return;
-    var dsW = data.dsWin / 100, dsD = data.dsDraw / 100, dsL = data.dsLose / 100;
-
-    // 更新主概率栏 → DeepSeek 预测
-    setBar("A", dsW); setBar("D", dsD); setBar("B", dsL);
-
-    // 更新 DeepSeek 列
-    document.getElementById("dsW").textContent = (dsW*100).toFixed(1)+"%";
-    document.getElementById("dsD").textContent = (dsD*100).toFixed(1)+"%";
-    document.getElementById("dsL").textContent = (dsL*100).toFixed(1)+"%";
-    document.getElementById("dsStatus").textContent = " ✓";
-
-    // 更新最可能比分
-    if (data.dsScores && data.dsScores.length > 0) {
-      document.getElementById("topScores").innerHTML = data.dsScores.slice(0,5).map(function(s) {
-        return '<div class="chip"><div class="s">' + escapeHtml(s.score) + '</div><div class="p">' + parseFloat(s.prob).toFixed(1) + "%</div></div>";
-      }).join("");
-    }
-
-    // 更新预测依据
-    if (data.dsReason) {
-      var info = document.getElementById("eloInfo");
-      info.innerHTML += ' <span style="font-size:.7rem;color:var(--accent);margin-left:8px">💡 ' + escapeHtml(data.dsReason) + '</span>';
-    }
-  })
-  .catch(function() {
-    // DeepSeek 不可用时保持 Elo 结果
-    document.getElementById("dsW").textContent = "离线";
-    document.getElementById("dsD").textContent = "—";
-    document.getElementById("dsL").textContent = "—";
-    document.getElementById("dsStatus").textContent = " ⚠️";
-  });
-}
-
-function escapeHtml(str) {
-  var d = document.createElement("div");
-  d.appendChild(document.createTextNode(str));
-  return d.innerHTML;
 }
 
 function setBar(k, p) {

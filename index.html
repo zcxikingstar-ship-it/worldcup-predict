@@ -428,44 +428,40 @@ var autoRefreshTimer = null, activeMatchId = null;
 var ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
 
 // ===== 日期工具（全部使用北京时间 UTC+8）=====
-function toBeijing(utcMs) {
-  return new Date(utcMs + 8 * 3600000); // UTC+8
-}
 function getDateStr(offset) {
-  var bj = toBeijing(Date.now());
-  bj.setDate(bj.getDate() + offset);
-  return bj.getFullYear() + ("0"+(bj.getMonth()+1)).slice(-2) + ("0"+bj.getDate()).slice(-2);
+  var bj = new Date(Date.now() + 8 * 3600000); // UTC+8
+  bj.setUTCDate(bj.getUTCDate() + offset);
+  return bj.getUTCFullYear() + ("0"+(bj.getUTCMonth()+1)).slice(-2) + ("0"+bj.getUTCDate()).slice(-2);
 }
 // 将 UTC 时间字符串转为北京日期 YYYYMMDD
 function utcToBeijingDate(utcStr) {
   if (!utcStr) return "";
   var utcMs = Date.parse(utcStr);
   if (isNaN(utcMs)) return "";
-  var bj = toBeijing(utcMs);
-  return bj.getFullYear() + ("0"+(bj.getMonth()+1)).slice(-2) + ("0"+bj.getDate()).slice(-2);
+  var bj = new Date(utcMs + 8 * 3600000); // 偏移后用 getUTC* 读取 = 北京时间
+  return bj.getUTCFullYear() + ("0"+(bj.getUTCMonth()+1)).slice(-2) + ("0"+bj.getUTCDate()).slice(-2);
 }
-// 给定北京日期返回前一天
+// 给定北京日期返回前一天（纯 UTC 运算，不依赖系统时区）
 function prevBeijingDate(ymd) {
   var y=parseInt(ymd.slice(0,4)), m=parseInt(ymd.slice(4,6)), d=parseInt(ymd.slice(6,8));
-  var date = new Date(y, m-1, d);
-  date.setDate(date.getDate() - 1);
-  return date.getFullYear() + ("0"+(date.getMonth()+1)).slice(-2) + ("0"+date.getDate()).slice(-2);
+  var date = new Date(Date.UTC(y, m-1, d));
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.getUTCFullYear() + ("0"+(date.getUTCMonth()+1)).slice(-2) + ("0"+date.getUTCDate()).slice(-2);
 }
 function formatBeijingTime(utcStr) {
   if (!utcStr) return "--:--";
   var utcMs = Date.parse(utcStr);
   if (isNaN(utcMs)) return "--:--";
-  var bj = toBeijing(utcMs);
-  return ("0"+bj.getHours()).slice(-2)+":"+("0"+bj.getMinutes()).slice(-2);
+  var bj = new Date(utcMs + 8 * 3600000);
+  return ("0"+bj.getUTCHours()).slice(-2)+":"+("0"+bj.getUTCMinutes()).slice(-2);
 }
 function getDateDisplay(ymd) {
-function getDateDisplay(ymd) {
   var y=parseInt(ymd.slice(0,4)), m=parseInt(ymd.slice(4,6)), d=parseInt(ymd.slice(6,8));
-  var bj = toBeijing(Date.now());
-  return y+"年"+m+"月"+d+"日 周"+["日","一","二","三","四","五","六"][new Date(y,m-1,d).getDay()] +
+  var bj = new Date(Date.now() + 8 * 3600000);
+  return y+"年"+m+"月"+d+"日 周"+["日","一","二","三","四","五","六"][new Date(Date.UTC(y,m-1,d)).getUTCDay()] +
     "　<span style='font-size:.65rem;color:var(--muted)'>北京时间 "+
-    bj.getFullYear()+"年"+(bj.getMonth()+1)+"月"+bj.getDate()+"日 "+
-    ("0"+bj.getHours()).slice(-2)+":"+("0"+bj.getMinutes()).slice(-2)+"</span>";
+    bj.getUTCFullYear()+"年"+(bj.getUTCMonth()+1)+"月"+bj.getUTCDate()+"日 "+
+    ("0"+bj.getUTCHours()).slice(-2)+":"+("0"+bj.getUTCMinutes()).slice(-2)+"</span>";
 }
 
 // ===== ESPN API =====

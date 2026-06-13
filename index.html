@@ -778,6 +778,50 @@ function predict() {
   renderHeat(m);
   renderTop(m);
   renderEvo(lamA,lamB,gA,gB,live);
+
+  // 调用 DeepSeek 更新比分预测
+  fetchDeepSeekScores(tA, tB, eloA, eloB, diff, W, D, L, m, live, gA, gB);
+}
+
+function fetchDeepSeekScores(tA, tB, eloA, eloB, diff, eloW, eloD, eloL, m, live, gA, gB) {
+  var scores = [];
+  for (var a = 0; a <= MAXG; a++) for (var b = 0; b <= MAXG; b++) {
+    scores.push({ score: a + ":" + b, prob: m[a][b] });
+  }
+  scores.sort(function(x, y) { return y.prob - x.prob; });
+  var topScores = scores.slice(0, 5).map(function(s) {
+    return { score: s.score, prob: (s.prob * 100).toFixed(1) };
+  });
+
+  var odds = window._currentOdds;
+  var scoreInfo = live ? (gA + ":" + gB + "（进行中）") : "";
+
+  fetch("http://localhost:8765/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      home: tA, away: tB,
+      eloHome: eloA, eloAway: eloB, eloDiff: diff,
+      modelW: (eloW * 100).toFixed(1), modelD: (eloD * 100).toFixed(1), modelL: (eloL * 100).toFixed(1),
+      oddsHome: odds && odds.home ? odds.home : "无",
+      oddsDraw: odds && odds.draw ? odds.draw : "无",
+      oddsAway: odds && odds.away ? odds.away : "无",
+      topScores: topScores,
+      status: live ? "live" : "pre",
+      scoreInfo: scoreInfo
+    })
+  })
+  .then(function(r) { if (!r.ok) throw new Error(""); return r.json(); })
+  .then(function(data) {
+    if (data.ok && data.dsScores && data.dsScores.length > 0) {
+      document.getElementById("topScores").innerHTML = data.dsScores.slice(0,5).map(function(s) {
+        var score = s.score || "";
+        var prob = parseFloat(s.prob) || 0;
+        return '<div class="chip"><div class="s">' + score + '</div><div class="p">' + prob.toFixed(1) + "%</div></div>";
+      }).join("");
+    }
+  })
+  .catch(function() { /* 代理不可用，保持 Elo 比分 */ });
 }
 
 function setBar(k, p) {

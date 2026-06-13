@@ -796,6 +796,8 @@ function fetchDeepSeekScores(tA, tB, eloA, eloB, diff, eloW, eloD, eloL, m, live
   var odds = window._currentOdds;
   var scoreInfo = live ? (gA + ":" + gB + "（进行中）") : "";
 
+  // 仅在 HTTP 下调用 DeepSeek（HTTPS 会被浏览器拦截 mixed content）
+  if (location.protocol === 'https:') return;
   fetch("http://localhost:8765/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

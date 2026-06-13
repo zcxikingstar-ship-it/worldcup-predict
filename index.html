@@ -427,24 +427,46 @@ var MAXG = 6, evoChart = null, currentDateStr = "", currentMatches = [];
 var autoRefreshTimer = null, activeMatchId = null;
 var ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
 
-// ===== 日期工具 =====
+// ===== 日期工具（全部使用北京时间 UTC+8）=====
 function getDateStr(offset) {
-  var d = new Date();
-  d.setDate(d.getDate() + offset);
-  return d.getFullYear() + ("0"+(d.getMonth()+1)).slice(-2) + ("0"+d.getDate()).slice(-2);
-}
-function getBeijingNow() {
   var now = new Date();
   var utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  return new Date(utc + (3600000 * 8));
+  var bj = new Date(utc + (3600000 * 8));
+  bj.setDate(bj.getDate() + offset);
+  return bj.getFullYear() + ("0"+(bj.getMonth()+1)).slice(-2) + ("0"+bj.getDate()).slice(-2);
+}
+// 将 UTC 时间字符串转为北京日期 YYYYMMDD
+function utcToBeijingDate(utcStr) {
+  if (!utcStr) return "";
+  var d = new Date(utcStr + (utcStr.indexOf("Z")<0?"Z":"")); // 确保是 UTC
+  if (isNaN(d.getTime())) return "";
+  var utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+  var bj = new Date(utc + (3600000 * 8));
+  return bj.getFullYear() + ("0"+(bj.getMonth()+1)).slice(-2) + ("0"+bj.getDate()).slice(-2);
+}
+// 给定北京日期返回前一天
+function prevBeijingDate(ymd) {
+  var y=parseInt(ymd.slice(0,4)), m=parseInt(ymd.slice(4,6)), d=parseInt(ymd.slice(6,8));
+  var date = new Date(y, m-1, d);
+  date.setDate(date.getDate() - 1);
+  return date.getFullYear() + ("0"+(date.getMonth()+1)).slice(-2) + ("0"+date.getDate()).slice(-2);
+}
+function formatBeijingTime(utcStr) {
+  if (!utcStr) return "--:--";
+  var d = new Date(utcStr + (utcStr.indexOf("Z")<0?"Z":""));
+  if (isNaN(d.getTime())) return "--:--";
+  var utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+  var bj = new Date(utc + (3600000 * 8));
+  return ("0"+bj.getHours()).slice(-2)+":"+("0"+bj.getMinutes()).slice(-2);
 }
 function getDateDisplay(ymd) {
   var y=parseInt(ymd.slice(0,4)), m=parseInt(ymd.slice(4,6)), d=parseInt(ymd.slice(6,8));
-  var date = new Date(y,m-1,d);
-  var bj = getBeijingNow();
-  var bjStr = bj.getFullYear()+"年"+(bj.getMonth()+1)+"月"+bj.getDate()+"日";
-  return y+"年"+m+"月"+d+"日 周"+["日","一","二","三","四","五","六"][date.getDay()] +
-    "　<span style='font-size:.65rem;color:var(--muted)'>北京时间: "+bjStr+" "+
+  var bj = new Date();
+  var utc = bj.getTime() + (bj.getTimezoneOffset() * 60000);
+  bj = new Date(utc + (3600000 * 8));
+  return y+"年"+m+"月"+d+"日 周"+["日","一","二","三","四","五","六"][new Date(y,m-1,d).getDay()] +
+    "　<span style='font-size:.65rem;color:var(--muted)'>北京时间 "+
+    bj.getFullYear()+"年"+(bj.getMonth()+1)+"月"+bj.getDate()+"日 "+
     ("0"+bj.getHours()).slice(-2)+":"+("0"+bj.getMinutes()).slice(-2)+"</span>";
 }
 
@@ -466,17 +488,54 @@ function espnToChinese(team) {
 
 function loadMatches() {
   document.getElementById("matchList").innerHTML = '<div class="loading-text">加载中...</div>';
-  fetch(ESPN_BASE + "?dates=" + currentDateStr)
-    .then(function(r) { if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
-    .then(function(data) {
-      currentMatches = (data.events||[]).map(parseMatch).filter(function(m){return m;});
-      renderMatchList();
-      document.getElementById("updateTime").textContent = "更新于 "+new Date().toLocaleTimeString();
-    })
-    .catch(function(err) {
-      document.getElementById("matchList").innerHTML =
-        '<div class="error-text">加载失败: '+err.message+'<br><small>请检查网络</small></div>';
+
+  // ESPN 日期使用美东时间，与北京时间差12小时。
+  // 一个北京日期可能横跨2个 ESPN 日期，所以需要查2天再过滤。
+  var prevDay = prevBeijingDate(currentDateStr);
+  var allMatches = [];
+  var loaded = 0, total = 2;
+  var hasError = false;
+
+  function fetchDate(ymd) {
+    fetch(ESPN_BASE + "?dates=" + ymd)
+      .then(function(r) { if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+      .then(function(data) {
+        (data.events||[]).forEach(function(ev) {
+          var m = parseMatch(ev);
+          if (m) {
+            // 用比赛 UTC 时间判断属于哪个北京日期
+            m.bjDate = utcToBeijingDate(ev.date);
+            allMatches.push(m);
+          }
+        });
+        loaded++;
+        if (loaded >= total) finish();
+      })
+      .catch(function(err) {
+        loaded++;
+        if (!hasError) { hasError = true; }
+        if (loaded >= total) finish();
+      });
+  }
+
+  function finish() {
+    // 只保留属于当前北京日期的比赛
+    currentMatches = allMatches.filter(function(m) {
+      return m.bjDate === currentDateStr;
     });
+    // 按开球时间排序
+    currentMatches.sort(function(a,b) { return (a.date||"").localeCompare(b.date||""); });
+    renderMatchList();
+    if (currentMatches.length === 0 && allMatches.length > 0) {
+      // 有比赛但不属于当天，显示提示
+      document.getElementById("matchList").innerHTML +=
+        '<div class="loading-text" style="font-size:.7rem;color:var(--muted)">(该北京日期无比赛，尝试切换日期)</div>';
+    }
+    document.getElementById("updateTime").textContent = "更新于 "+new Date().toLocaleTimeString();
+  }
+
+  fetchDate(currentDateStr);
+  fetchDate(prevDay);
 }
 
 function parseMatch(ev) {
@@ -520,7 +579,7 @@ function renderMatchList() {
     html += '<div class="match-team">'+m.awayName+'</div>';
     html += '<div class="match-info">'+m.venue+'</div></div>';
     html += '<div class="match-score'+sc+'">';
-    if (m.status==="pre") { html += new Date(m.date).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}); }
+    if (m.status==="pre") { html += formatBeijingTime(m.date); }
     else { html += m.homeScore+" : "+m.awayScore; }
     html += '</div><span class="'+tagCls+'">'+tagTxt+'</span></div>';
   });

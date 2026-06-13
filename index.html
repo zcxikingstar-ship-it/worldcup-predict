@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚽ 世界杯实时胜负预测</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg1:#0f1923; --bg2:#1a2c3d; --card:#16242fdd;
+    --accent:#00e5a0; --accent2:#ff5470; --accent3:#ffd166;
+    --text:#e8f1f5; --muted:#8aa3b5; --blue:#4da6ff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:linear-gradient(135deg,var(--bg1),var(--bg2) 60%,#0d3b2e);
+    color:var(--text); min-height:100vh; padding:24px;
+  }
+  h1 { text-align:center; font-size:1.9rem; letter-spacing:2px; margin-bottom:4px;
+       background:linear-gradient(90deg,var(--accent),var(--accent3));
+       -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .sub { text-align:center; color:var(--muted); margin-bottom:24px; font-size:.9rem; }
+  .container { max-width:1100px; margin:0 auto; display:grid; gap:20px;
+               grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .card {
+    background:var(--card); border:1px solid #ffffff14; border-radius:16px;
+    padding:20px; backdrop-filter:blur(8px);
+    box-shadow:0 8px 24px #00000055; animation:fadeUp .5s ease both;
+  }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1} }
+  .card h2 { font-size:1.05rem; margin-bottom:14px; color:var(--accent); }
+  label { display:block; font-size:.8rem; color:var(--muted); margin:10px 0 4px; }
+  select, input {
+    width:100%; padding:9px 12px; border-radius:8px; border:1px solid #ffffff22;
+    background:#0c1820; color:var(--text); font-size:.95rem; outline:none;
+  }
+  select:focus, input:focus { border-color:var(--accent); }
+  .row { display:flex; gap:12px; } .row>div { flex:1; }
+  button {
+    width:100%; margin-top:16px; padding:12px; border:none; border-radius:10px;
+    font-size:1rem; font-weight:700; cursor:pointer; color:#04261b;
+    background:linear-gradient(90deg,var(--accent),#46f2c0);
+    transition:transform .15s, box-shadow .15s;
+  }
+  button:hover { transform:translateY(-2px); box-shadow:0 6px 18px #00e5a055; }
+  button.small { width:auto; padding:6px 14px; font-size:.8rem; margin:0; border-radius:6px; }
+  button.refresh { background:linear-gradient(90deg,var(--blue),#80c8ff); color:#02121f; }
+  .vs { text-align:center; font-size:1.2rem; font-weight:700; margin:12px 0 4px; }
+  .vs .flag { font-size:1.6rem; }
+  .bars { margin-top:8px; }
+  .bar-item { margin-bottom:14px; }
+  .bar-label { display:flex; justify-content:space-between; font-size:.85rem; margin-bottom:5px; }
+  .bar-track { height:14px; background:#ffffff12; border-radius:7px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:7px; width:0; transition:width .9s cubic-bezier(.2,.8,.2,1); }
+  .heat { display:grid; gap:3px; margin-top:6px; }
+  .heat .cell {
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    font-size:.62rem; border-radius:5px; color:#fff; transition:transform .15s;
+    cursor:default;
+  }
+  .heat .cell:hover { transform:scale(1.18); z-index:2; outline:1px solid #fff8; }
+  .heat .hdr { background:none; color:var(--muted); font-weight:700; font-size:.7rem; }
+  .top-scores { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+  .chip {
+    background:#ffffff10; border:1px solid #ffffff20; padding:8px 14px;
+    border-radius:10px; text-align:center; flex:1; min-width:80px;
+  }
+  .chip .s { font-size:1.25rem; font-weight:800; color:var(--accent3); }
+  .chip .p { font-size:.75rem; color:var(--muted); }
+  .live-badge {
+    display:inline-block; background:var(--accent2); color:#fff; font-size:.7rem;
+    padding:2px 8px; border-radius:20px; margin-left:8px; animation:pulse 1.2s infinite;
+  }
+  @keyframes pulse { 50%{opacity:.5} }
+  .wide { grid-column:1/-1; }
+  canvas { max-height:280px; }
+  .note { font-size:.75rem; color:var(--muted); margin-top:10px; line-height:1.5; }
+
+  /* 赛程列表 */
+  .match-list { max-height:420px; overflow-y:auto; }
+  .match-row {
+    display:flex; align-items:center; gap:10px; padding:10px 12px;
+    border-radius:10px; margin-bottom:6px; cursor:pointer;
+    background:#ffffff08; border:1px solid transparent;
+    transition:background .15s, border-color .15s;
+  }
+  .match-row:hover, .match-row.active { background:#ffffff16; border-color:var(--accent); }
+  .match-left { flex:1; min-width:0; }
+  .match-team { font-size:.85rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .match-info { font-size:.7rem; color:var(--muted); margin-top:2px; }
+  .match-score { font-size:1.15rem; font-weight:800; padding:0 6px; white-space:nowrap; }
+  .match-score.live { color:var(--accent2); }
+  .match-score.final { color:var(--muted); }
+  .status-tag {
+    font-size:.65rem; padding:2px 8px; border-radius:12px; font-weight:700;
+    white-space:nowrap;
+  }
+  .status-tag.pre { background:#ffffff15; color:var(--muted); }
+  .status-tag.in { background:#ff547033; color:var(--accent2); animation:pulse 1.2s infinite; }
+  .status-tag.post { background:#ffffff10; color:var(--muted); }
+
+  .day-nav { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+  .day-nav button { width:32px; height:32px; border-radius:50%; margin:0; padding:0; font-size:1rem;
+                     background:#ffffff12; color:var(--text); border:1px solid #ffffff22; cursor:pointer; }
+  .day-nav button:hover { background:#ffffff22; }
+  .day-nav .day-label { flex:1; text-align:center; font-size:.85rem; font-weight:600; }
+  .refresh-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .auto-toggle { font-size:.75rem; color:var(--muted); display:flex; align-items:center; gap:6px; }
+  .auto-toggle input { width:auto; }
+
+  .loading-text { text-align:center; color:var(--muted); padding:24px; font-size:.85rem; }
+  .error-text { text-align:center; color:var(--accent2); padding:24px; font-size:.85rem; }
+
+  /* 对比面板 */
+  .compare-row { display:flex; gap:12px; margin-top:12px; }
+  .compare-col { flex:1; background:#ffffff08; border-radius:10px; padding:12px; text-align:center; }
+  .compare-col .title { font-size:.7rem; color:var(--muted); margin-bottom:4px; }
+  .compare-col .vals { font-size:.8rem; font-weight:600; }
+  .compare-col .vals .w { color:var(--accent); }
+  .compare-col .vals .d { color:var(--accent3); }
+  .compare-col .vals .l { color:var(--accent2); }
+
+  /* 回溯测试 */
+  .bt-row { display:flex; align-items:center; gap:10px; padding:8px 10px;
+            border-radius:8px; margin-bottom:4px; background:#ffffff06; font-size:.82rem; }
+  .bt-match { flex:1; }
+  .bt-result { font-weight:700; padding:0 8px; }
+  .bt-pred { font-size:.75rem; color:var(--muted); }
+  .bt-hit { color:var(--accent); }
+  .bt-miss { color:var(--accent2); }
+  .bt-summary { display:flex; gap:16px; margin-top:10px; }
+  .bt-stat { text-align:center; }
+  .bt-stat .val { font-size:1.3rem; font-weight:800; color:var(--accent); }
+  .bt-stat .lbl { font-size:.7rem; color:var(--muted); }
+
+  .elo-diff { display:inline-block; padding:2px 8px; border-radius:6px; font-size:.7rem; font-weight:700; }
+  .elo-diff.fav { background:#00e5a022; color:var(--accent); }
+  .elo-diff.close { background:#ffd16622; color:var(--accent3); }
+
+  /* 赔率面板 */
+  .odds-table { width:100%; border-collapse:collapse; font-size:.8rem; margin-top:8px; }
+  .odds-table th { color:var(--muted); font-weight:400; padding:6px 8px; text-align:center; border-bottom:1px solid #ffffff10; font-size:.7rem; }
+  .odds-table td { padding:8px; text-align:center; }
+  .odds-table .odd-val { font-size:1rem; font-weight:800; }
+  .odds-table .odd-prob { font-size:.72rem; color:var(--muted); }
+  .odds-table .odd-h { color:var(--accent); }
+  .odds-table .odd-d { color:var(--accent3); }
+  .odds-table .odd-a { color:var(--accent2); }
+  .odds-tag { display:inline-block; padding:3px 10px; border-radius:4px; font-size:.7rem; font-weight:700; }
+  .odds-tag.home { background:#00e5a022; color:var(--accent); }
+  .odds-tag.draw { background:#ffd16622; color:var(--accent3); }
+  .odds-tag.away { background:#ff547022; color:var(--accent2); }
+
+  .score-odds-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-top:6px; }
+  .score-odds-item { background:#ffffff08; padding:6px 4px; border-radius:6px; text-align:center; }
+  .score-odds-item:hover { background:#ffffff14; }
+  .score-odds-item .sc { font-size:.8rem; font-weight:700; }
+  .score-odds-item .od { font-size:.65rem; color:var(--muted); }
+  .score-odds-item.alt .sc { color:var(--accent2); }
+  .score-odds-item.alt .od { color:var(--muted); }
+
+  .odds-provider { display:flex; align-items:center; gap:6px; margin-bottom:10px; }
+  .odds-provider img { height:18px; }
+  .odds-provider span { font-size:.72rem; color:var(--muted); }
+
+  .odds-sub { font-size:.78rem; color:var(--muted); margin-top:6px; }
+  .odds-sub b { color:var(--accent3); }
+</style>
+</head>
+<body>
+<h1>⚽ 世界杯实时胜负 · 比分概率预测</h1>
+<p class="sub">Elo + 泊松 + ESPN博彩赔率 · 多模型对比 · 回溯验证</p>
+
+<div class="container">
+  <!-- 📡 今日赛程 -->
+  <div class="card">
+    <h2>📡 真实赛程 <span style="font-size:.7rem;color:var(--muted)">— ESPN</span></h2>
+    <div class="day-nav">
+      <button onclick="changeDay(-1)">◀</button>
+      <span class="day-label" id="dayLabel">—</span>
+      <button onclick="changeDay(1)">▶</button>
+      <button class="small" style="margin-left:auto" onclick="changeDay(0)">📅 今天</button>
+    </div>
+    <div class="refresh-row">
+      <span style="font-size:.75rem;color:var(--muted)" id="updateTime"></span>
+      <label class="auto-toggle">
+        <input type="checkbox" id="autoRefresh" checked onchange="toggleAutoRefresh()">
+        自动刷新 (30s)
+      </label>
+    </div>
+    <div class="match-list" id="matchList">
+      <div class="loading-text">加载中...</div>
+    </div>
+    <button class="small refresh" onclick="loadMatches()" style="margin-top:10px">🔄 刷新赛程</button>
+    <p class="note" style="font-size:.65rem">数据来源: ESPN public API · 赔率: DraftKings</p>
+  </div>
+
+  <!-- 控制面板 -->
+  <div class="card">
+    <h2>🎮 比赛设置 <span id="dataSource" style="font-size:.7rem;color:var(--blue)"></span></h2>
+    <div class="row">
+      <div><label>主队</label><select id="teamA"></select></div>
+      <div><label>客队</label><select id="teamB"></select></div>
+    </div>
+    <div id="eloInfo" style="font-size:.75rem;color:var(--muted);margin-top:8px;text-align:center"></div>
+    <label style="margin-top:12px">
+      <input type="checkbox" id="liveMode" style="width:auto;margin-right:6px">
+      实况模式（比赛进行中）
+    </label>
+    <div id="livePanel" style="display:none">
+      <div class="row">
+        <div><label>主队当前进球</label><input type="number" id="goalsA" value="0" min="0"></div>
+        <div><label>客队当前进球</label><input type="number" id="goalsB" value="0" min="0"></div>
+      </div>
+      <label>已进行分钟数: <span id="minLabel">45</span>'</label>
+      <input type="range" id="minute" min="0" max="90" value="45" style="padding:0">
+    </div>
+    <button onclick="predict()">🔮 开始预测</button>
+    <p class="note">点击左侧赛程自动填充。Elo 越高场均进球越多（强队对决进球多，弱队互啄进球少）。</p>
+  </div>
+
+  <!-- 胜平负 -->
+  <div class="card">
+    <h2>📊 胜 / 平 / 负 概率 <span id="liveBadge" class="live-badge" style="display:none">LIVE</span></h2>
+    <div class="vs" id="vsTitle">— vs —</div>
+    <div class="bars">
+      <div class="bar-item">
+        <div class="bar-label"><span id="lblA">主胜</span><span id="pctA">–</span></div>
+        <div class="bar-track"><div class="bar-fill" id="barA" style="background:linear-gradient(90deg,#00e5a0,#46f2c0)"></div></div>
+      </div>
+      <div class="bar-item">
+        <div class="bar-label"><span>平局</span><span id="pctD">–</span></div>
+        <div class="bar-track"><div class="bar-fill" id="barD" style="background:linear-gradient(90deg,#ffd166,#ffb84d)"></div></div>
+      </div>
+      <div class="bar-item">
+        <div class="bar-label"><span id="lblB">客胜</span><span id="pctB">–</span></div>
+        <div class="bar-track"><div class="bar-fill" id="barB" style="background:linear-gradient(90deg,#ff5470,#ff7a9c)"></div></div>
+      </div>
+    </div>
+
+    <div class="compare-row">
+      <div class="compare-col">
+        <div class="title">🎯 Elo 模型</div>
+        <div class="vals"><span class="w" id="eloW">–</span> / <span class="d" id="eloD">–</span> / <span class="l" id="eloL">–</span></div>
+      </div>
+      <div class="compare-col">
+        <div class="title">💰 博彩隐含概率</div>
+        <div class="vals"><span class="w" id="oddsW">–</span> / <span class="d" id="oddsD">–</span> / <span class="l" id="oddsL">–</span></div>
+      </div>
+    </div>
+
+    <h2 style="margin-top:14px">🏆 最可能比分</h2>
+    <div class="top-scores" id="topScores"></div>
+  </div>
+
+  <!-- 热力图 -->
+  <div class="card">
+    <h2>🔥 精确比分概率热力图</h2>
+    <div class="heat" id="heatmap"></div>
+    <p class="note">行 = 主队进球，列 = 客队进球 · 越亮概率越高</p>
+  </div>
+
+  <!-- 回溯测试 -->
+  <div class="card">
+    <h2>📋 模型回溯测试</h2>
+    <div id="backtestBody">
+      <div class="loading-text">页面加载中，即将自动获取...</div>
+    </div>
+  </div>
+
+  <!-- 💰 博彩赔率面板 -->
+  <div class="card wide">
+    <h2>💰 DraftKings 实时赔率 <span style="font-size:.7rem;color:var(--muted)" id="oddsRefreshTime"></span></h2>
+
+    <div class="odds-provider">
+      <span>数据来源: ESPN / DraftKings · 胜平负+让球+大小球+比分赔率 · 30s自动刷新</span>
+    </div>
+
+    <!-- 胜平负赔率表 -->
+    <div style="overflow-x:auto">
+    <table class="odds-table" id="oddsMoneyline">
+      <thead><tr><th></th><th id="oddLabelH">主胜</th><th>平局</th><th id="oddLabelA">客胜</th></tr></thead>
+      <tbody>
+        <tr>
+          <td style="color:var(--muted);font-size:.7rem">美式赔率</td>
+          <td class="odd-h"><span class="odd-val" id="mlAmH">—</span></td>
+          <td class="odd-d"><span class="odd-val" id="mlAmD">—</span></td>
+          <td class="odd-a"><span class="odd-val" id="mlAmA">—</span></td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);font-size:.7rem">十进制</td>
+          <td class="odd-h"><span class="odd-val" id="mlDecH">—</span></td>
+          <td class="odd-d"><span class="odd-val" id="mlDecD">—</span></td>
+          <td class="odd-a"><span class="odd-val" id="mlDecA">—</span></td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);font-size:.7rem">隐含概率</td>
+          <td class="odd-h"><span class="odd-prob" id="mlProbH">—</span></td>
+          <td class="odd-d"><span class="odd-prob" id="mlProbD">—</span></td>
+          <td class="odd-a"><span class="odd-prob" id="mlProbA">—</span></td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <!-- 让球 + 大小球 -->
+    <div class="row" style="margin-top:12px">
+      <div style="flex:1;background:#ffffff08;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:4px">⚽ 让球盘</div>
+        <div style="font-size:.85rem;font-weight:700"><span id="spreadH">—</span></div>
+        <div style="font-size:.7rem;color:var(--muted)"><span id="spreadA">—</span></div>
+      </div>
+      <div style="flex:1;background:#ffffff08;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:4px">📊 大小球 2.5</div>
+        <div style="font-size:.85rem;font-weight:700">大 <span id="overOdds">—</span></div>
+        <div style="font-size:.7rem;color:var(--muted)">小 <span id="underOdds">—</span></div>
+      </div>
+      <div style="flex:1;background:#ffffff08;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:4px">🏦 庄家抽水</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--accent3)" id="overround">—</div>
+      </div>
+    </div>
+
+    <!-- 比分赔率（模型推算） -->
+    <h2 style="margin-top:16px">🎲 比分赔率 <span style="font-size:.7rem;color:var(--muted)">— 泊松模型公平赔率</span></h2>
+    <div class="score-odds-grid" id="scoreOddsGrid"></div>
+    <p class="note">基于 Elo+泊松模型反推的公平比分赔率（十进制，未含庄家抽水）。← 红色为冷门比分（赔率>15）。</p>
+  </div>
+
+  <!-- 概率演化图 -->
+  <div class="card wide">
+    <h2>📈 概率演化（当前比分不变时，随比赛时间的胜率变化）</h2>
+    <canvas id="evoChart"></canvas>
+  </div>
+</div>
+
+<script>
+// ===== 球队 Elo 评分（2026 世界杯 48 队 + 扩展） =====
+// 基于国际 Elo 排名 + 近期世界杯预选赛表现
+var TEAMS = {
+  // 顶层强队 (Elo 2000+)
+  "🇦🇷 阿根廷":2143, "🇫🇷 法国":2110, "🇪🇸 西班牙":2095, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 英格兰":2055,
+  "🇧🇷 巴西":2040, "🇵🇹 葡萄牙":2030, "🇳🇱 荷兰":2005,
+  // 二档 (1900-2000)
+  "🇩🇪 德国":1985, "🇧🇪 比利时":1968, "🇮🇹 意大利":1960,
+  "🇺🇾 乌拉圭":1930, "🇭🇷 克罗地亚":1925, "🇨🇴 哥伦比亚":1918,
+  // 三档 (1800-1900)
+  "🇲🇦 摩洛哥":1880, "🇦🇹 奥地利":1870, "🇯🇵 日本":1865, "🇨🇭 瑞士":1855,
+  "🇩🇰 丹麦":1850, "🇲🇽 墨西哥":1845, "🇺🇸 美国":1840, "🇵🇱 波兰":1815,
+  "🇷🇸 塞尔维亚":1830, "🇺🇦 乌克兰":1820, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 苏格兰":1820,
+  "🇪🇨 厄瓜多尔":1810, "🇵🇾 巴拉圭":1810, "🇳🇴 挪威":1830, "🇸🇪 瑞典":1810,
+  "🇹🇷 土耳其":1800,
+  // 四档 (1700-1800)
+  "🇰🇷 韩国":1798, "🇸🇳 塞内加尔":1790, "🇨🇮 科特迪瓦":1790, "🇵🇪 秘鲁":1790,
+  "🇮🇷 伊朗":1780, "🇨🇦 加拿大":1780, "🇬🇷 希腊":1780, "🇨🇱 智利":1780,
+  "🇪🇬 埃及":1770, "🇳🇬 尼日利亚":1760, "🇨🇲 喀麦隆":1730,
+  "🇬🇭 加纳":1750, "🇧🇦 波黑":1750, "🇦🇺 澳大利亚":1750,
+  "🇩🇿 阿尔及利亚":1740, "🇨🇷 哥斯达黎加":1720,
+  // 五档 (1600-1700)
+  "🇿🇦 南非":1690, "🇸🇦 沙特":1690, "🇶🇦 卡塔尔":1680,
+  "🇵🇦 巴拿马":1680, "🇦🇪 阿联酋":1660, "🇺🇿 乌兹别克斯坦":1670,
+  "🇳🇿 新西兰":1650, "🇨🇿 捷克":1780,
+  // 六档 (<1600)
+  "🇭🇹 海地":1550
+};
+
+// ESPN 缩写 → 旗标+中文名
+var ESPN_MAP = {
+  "FRA":"🇫🇷 法国","ESP":"🇪🇸 西班牙","ENG":"🏴󠁧󠁢󠁥󠁮󠁧󠁿 英格兰","POR":"🇵🇹 葡萄牙",
+  "NED":"🇳🇱 荷兰","BEL":"🇧🇪 比利时","GER":"🇩🇪 德国","ITA":"🇮🇹 意大利",
+  "CRO":"🇭🇷 克罗地亚","SUI":"🇨🇭 瑞士","DEN":"🇩🇰 丹麦","AUT":"🇦🇹 奥地利",
+  "SRB":"🇷🇸 塞尔维亚","UKR":"🇺🇦 乌克兰","SCO":"🏴󠁧󠁢󠁳󠁣󠁴󠁿 苏格兰","BIH":"🇧🇦 波黑",
+  "ARG":"🇦🇷 阿根廷","BRA":"🇧🇷 巴西","URU":"🇺🇾 乌拉圭","COL":"🇨🇴 哥伦比亚",
+  "ECU":"🇪🇨 厄瓜多尔","PAR":"🇵🇾 巴拉圭","CHI":"🇨🇱 智利","PER":"🇵🇪 秘鲁",
+  "USA":"🇺🇸 美国","MEX":"🇲🇽 墨西哥","CAN":"🇨🇦 加拿大","CRC":"🇨🇷 哥斯达黎加",
+  "PAN":"🇵🇦 巴拿马","HAI":"🇭🇹 海地",
+  "MAR":"🇲🇦 摩洛哥","SEN":"🇸🇳 塞内加尔","EGY":"🇪🇬 埃及","CIV":"🇨🇮 科特迪瓦",
+  "NGA":"🇳🇬 尼日利亚","ALG":"🇩🇿 阿尔及利亚","CMR":"🇨🇲 喀麦隆",
+  "GHA":"🇬🇭 加纳","RSA":"🇿🇦 南非",
+  "JPN":"🇯🇵 日本","KOR":"🇰🇷 韩国","KSA":"🇸🇦 沙特","AUS":"🇦🇺 澳大利亚",
+  "IRN":"🇮🇷 伊朗","QAT":"🇶🇦 卡塔尔","UAE":"🇦🇪 阿联酋","UZB":"🇺🇿 乌兹别克斯坦",
+  "NZL":"🇳🇿 新西兰","CZE":"🇨🇿 捷克","NOR":"🇳🇴 挪威","SWE":"🇸🇪 瑞典",
+  "GRE":"🇬🇷 希腊","TUR":"🇹🇷 土耳其","POL":"🇵🇱 波兰"
+};
+
+// ESPN displayName → 简称（回退映射）
+var ESPN_NAME_MAP = {
+  "Canada":"CAN","United States":"USA","Mexico":"MEX","Brazil":"BRA","Argentina":"ARG",
+  "France":"FRA","Spain":"ESP","England":"ENG","Portugal":"POR","Netherlands":"NED",
+  "Belgium":"BEL","Germany":"GER","Italy":"ITA","Croatia":"CRO","Switzerland":"SUI",
+  "Denmark":"DEN","Austria":"AUT","Serbia":"SRB","Ukraine":"UKR",
+  "Scotland":"SCO","Bosnia-Herzegovina":"BIH","Uruguay":"URU","Colombia":"COL",
+  "Ecuador":"ECU","Paraguay":"PAR","Costa Rica":"CRC","Panama":"PAN","Haiti":"HAI",
+  "Morocco":"MAR","Senegal":"SEN","Egypt":"EGY","Ivory Coast":"CIV","Nigeria":"NGA",
+  "Algeria":"ALG","Cameroon":"CMR","Ghana":"GHA","South Africa":"RSA",
+  "Japan":"JPN","South Korea":"KOR","Saudi Arabia":"KSA","Australia":"AUS",
+  "Iran":"IRN","Qatar":"QAT","United Arab Emirates":"UAE","Uzbekistan":"UZB",
+  "New Zealand":"NZL","Peru":"PER","Chile":"CHI","Norway":"NOR","Sweden":"SWE",
+  "Greece":"GRE","Turkey":"TUR","Poland":"POL","Czechia":"CZE","Czech Republic":"CZE"
+};
+
+var MAXG = 6, evoChart = null, currentDateStr = "", currentMatches = [];
+var autoRefreshTimer = null, activeMatchId = null;
+var ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
+
+// ===== 日期工具 =====
+function getDateStr(offset) {
+  var d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.getFullYear() + ("0"+(d.getMonth()+1)).slice(-2) + ("0"+d.getDate()).slice(-2);
+}
+function getDateDisplay(ymd) {
+  var y=parseInt(ymd.slice(0,4)), m=parseInt(ymd.slice(4,6)), d=parseInt(ymd.slice(6,8));
+  var date = new Date(y,m-1,d);
+  return y+"年"+m+"月"+d+"日 周"+["日","一","二","三","四","五","六"][date.getDay()];
+}
+
+// ===== ESPN API =====
+function espnToChinese(team) {
+  if (ESPN_MAP[team.abbreviation]) return ESPN_MAP[team.abbreviation];
+  var mapped = ESPN_NAME_MAP[team.displayName];
+  if (mapped && ESPN_MAP[mapped]) return ESPN_MAP[mapped];
+  var flag = {"FRA":"🇫🇷","ESP":"🇪🇸","ENG":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","POR":"🇵🇹","NED":"🇳🇱","BEL":"🇧🇪","GER":"🇩🇪",
+    "ITA":"🇮🇹","CRO":"🇭🇷","SUI":"🇨🇭","DEN":"🇩🇰","AUT":"🇦🇹","SRB":"🇷🇸","UKR":"🇺🇦",
+    "SCO":"🏴󠁧󠁢󠁳󠁣󠁴󠁿","BIH":"🇧🇦","ARG":"🇦🇷","BRA":"🇧🇷","URU":"🇺🇾","COL":"🇨🇴","ECU":"🇪🇨",
+    "PAR":"🇵🇾","CHI":"🇨🇱","PER":"🇵🇪","USA":"🇺🇸","MEX":"🇲🇽","CAN":"🇨🇦","CRC":"🇨🇷",
+    "PAN":"🇵🇦","HAI":"🇭🇹","MAR":"🇲🇦","SEN":"🇸🇳","EGY":"🇪🇬","CIV":"🇨🇮","NGA":"🇳🇬",
+    "ALG":"🇩🇿","CMR":"🇨🇲","GHA":"🇬🇭","RSA":"🇿🇦","JPN":"🇯🇵","KOR":"🇰🇷","KSA":"🇸🇦",
+    "AUS":"🇦🇺","IRN":"🇮🇷","QAT":"🇶🇦","UAE":"🇦🇪","UZB":"🇺🇿","NZL":"🇳🇿","CZE":"🇨🇿",
+    "NOR":"🇳🇴","SWE":"🇸🇪","GRE":"🇬🇷","TUR":"🇹🇷","POL":"🇵🇱"}[team.abbreviation] || "🏳️";
+  return flag + " " + team.displayName;
+}
+
+function loadMatches() {
+  document.getElementById("matchList").innerHTML = '<div class="loading-text">加载中...</div>';
+  fetch(ESPN_BASE + "?dates=" + currentDateStr)
+    .then(function(r) { if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+    .then(function(data) {
+      currentMatches = (data.events||[]).map(parseMatch).filter(function(m){return m;});
+      renderMatchList();
+      document.getElementById("updateTime").textContent = "更新于 "+new Date().toLocaleTimeString();
+    })
+    .catch(function(err) {
+      document.getElementById("matchList").innerHTML =
+        '<div class="error-text">加载失败: '+err.message+'<br><small>请检查网络</small></div>';
+    });
+}
+
+function parseMatch(ev) {
+  if (!ev.competitions || !ev.competitions.length) return null;
+  var comp = ev.competitions[0];
+  if (!comp.status || !comp.competitors || comp.competitors.length < 2) return null;
+  var st = comp.status.type;
+  var home = comp.competitors[0], away = comp.competitors[1];
+  var odds = null;
+  if (comp.odds && comp.odds.length>0 && comp.odds[0] && comp.odds[0].moneyline) {
+    var ml = comp.odds[0].moneyline;
+    odds = {
+      home: ml.home ? ml.home.close ? ml.home.close.odds : ml.home.open ? ml.home.open.odds : null : null,
+      draw: ml.draw ? ml.draw.close ? ml.draw.close.odds : ml.draw.open ? ml.draw.open.odds : null : null,
+      away: ml.away ? ml.away.close ? ml.away.close.odds : ml.away.open ? ml.away.open.odds : null : null
+    };
+  }
+  return {
+    id: ev.id, date: ev.date, name: ev.name,
+    homeName: espnToChinese(home.team), awayName: espnToChinese(away.team),
+    homeAbbr: home.team.abbreviation, awayAbbr: away.team.abbreviation,
+    homeScore: parseInt(home.score)||0, awayScore: parseInt(away.score)||0,
+    status: st.state, statusDesc: st.description,
+    clock: comp.status.displayClock, clockSeconds: comp.status.clock||0,
+    venue: comp.venue?comp.venue.fullName:"", odds: odds,
+    homeId: home.id, awayId: away.id
+  };
+}
+
+function renderMatchList() {
+  var el = document.getElementById("matchList");
+  if (currentMatches.length===0) { el.innerHTML = '<div class="loading-text">当日暂无比赛</div>'; return; }
+  var html = "";
+  currentMatches.forEach(function(m) {
+    var sc = m.status==="in"?" live":(m.status==="post"?" final":"");
+    var tagCls = "status-tag "+m.status;
+    var tagTxt = m.status==="in"?"LIVE "+m.clock:(m.status==="post"?"FT":m.statusDesc);
+    var active = m.id===activeMatchId?" active":"";
+    html += '<div class="match-row'+active+'" onclick="selectMatch(\''+m.id+'\')" title="点击选取">';
+    html += '<div class="match-left"><div class="match-team">'+m.homeName+'</div>';
+    html += '<div class="match-team">'+m.awayName+'</div>';
+    html += '<div class="match-info">'+m.venue+'</div></div>';
+    html += '<div class="match-score'+sc+'">';
+    if (m.status==="pre") { html += new Date(m.date).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}); }
+    else { html += m.homeScore+" : "+m.awayScore; }
+    html += '</div><span class="'+tagCls+'">'+tagTxt+'</span></div>';
+  });
+  el.innerHTML = html;
+  if (activeMatchId && !currentMatches.some(function(m){return m.id===activeMatchId;})) activeMatchId=null;
+}
+
+// ===== 博彩赔率 → 隐含概率 =====
+function oddsToImpliedProb(hOdds, dOdds, aOdds) {
+  // 美式赔率 → 概率，然后去水（normalize overround）
+  function toProb(odds) {
+    if (odds===null||odds===undefined) return null;
+    var o = parseInt(odds);
+    if (isNaN(o)) return null;
+    return o>0 ? 100/(o+100) : Math.abs(o)/(Math.abs(o)+100);
+  }
+  var hp=toProb(hOdds), dp=toProb(dOdds), ap=toProb(aOdds);
+  if (hp===null||dp===null||ap===null) return null;
+  var total = hp+dp+ap;
+  return [hp/total, dp/total, ap/total]; // 归一化去水
+}
+
+// ===== 比赛选取 → 自动填充 =====
+function selectMatch(matchId) {
+  var m = null;
+  for (var i=0;i<currentMatches.length;i++) { if(currentMatches[i].id===matchId){m=currentMatches[i];break;} }
+  if (!m) return;
+  activeMatchId = matchId;
+
+  ensureTeam(m.homeName);
+  ensureTeam(m.awayName);
+
+  document.getElementById("teamA").value = m.homeName;
+  document.getElementById("teamB").value = m.awayName;
+
+  var isLive = m.status==="in";
+  document.getElementById("liveMode").checked = isLive;
+  document.getElementById("livePanel").style.display = isLive?"block":"none";
+
+  if (isLive||m.status==="post") {
+    document.getElementById("goalsA").value = m.homeScore;
+    document.getElementById("goalsB").value = m.awayScore;
+    var mins = Math.min(90, Math.floor(m.clockSeconds/60));
+    document.getElementById("minute").value = mins;
+    document.getElementById("minLabel").textContent = mins;
+    if (m.status==="post") {
+      document.getElementById("liveMode").checked = false;
+      document.getElementById("livePanel").style.display = "none";
+    }
+  }
+
+  document.getElementById("dataSource").textContent =
+    m.status==="in"?"— ESPN LIVE":(m.status==="post"?"— ESPN 已完赛":"— ESPN 赛程");
+
+  // 存储当前赔率供 predict 使用
+  window._currentOdds = m.odds;
+  // 也存储 spread 和 total 赔率
+  if (m.odds && m.odds.home && m.odds.draw && m.odds.away) {
+    window._currentSpread = { homeLine: "—", homeOdds: "—", awayLine: "—", awayOdds: "—" };
+    window._currentTotal = { overOdds: "—", underOdds: "—" };
+  }
+  // 异步获取详细赔率
+  fetchDetailedOdds(m.id);
+
+  renderMatchList();
+  predict();
+}
+
+function ensureTeam(name) {
+  if (TEAMS[name]) return;
+  // 自动推断 Elo: 查找相似名称
+  var guess = 1700;
+  var keys = Object.keys(TEAMS);
+  for (var i=0;i<keys.length;i++) {
+    var short = keys[i].split(" ").slice(1).join(" ");
+    var inputShort = name.split(" ").slice(1).join(" ");
+    if (short===inputShort) { guess=TEAMS[keys[i]]; break; }
+  }
+  TEAMS[name] = guess;
+  var selA=document.getElementById("teamA"), selB=document.getElementById("teamB");
+  selA.add(new Option(name,name));
+  selB.add(new Option(name,name));
+}
+
+// ===== 日期与刷新 =====
+function changeDay(offset) {
+  if (offset===0) { currentDateStr=getDateStr(0); }
+  else {
+    var y=parseInt(currentDateStr.slice(0,4)),m=parseInt(currentDateStr.slice(4,6)),d=parseInt(currentDateStr.slice(6,8));
+    var date=new Date(y,m-1,d); date.setDate(date.getDate()+offset);
+    currentDateStr = date.getFullYear()+("0"+(date.getMonth()+1)).slice(-2)+("0"+date.getDate()).slice(-2);
+  }
+  document.getElementById("dayLabel").textContent = getDateDisplay(currentDateStr);
+  loadMatches();
+}
+function toggleAutoRefresh() {
+  document.getElementById("autoRefresh").checked ? startAutoRefresh() : stopAutoRefresh();
+}
+function startAutoRefresh() {
+  stopAutoRefresh();
+  autoRefreshTimer=setInterval(function() {
+    loadMatches();
+    // 如果有选中的比赛且有 eventId，刷新详细赔率
+    if (activeMatchId) {
+      fetchDetailedOdds(activeMatchId);
+    }
+  }, 30000);
+}
+function stopAutoRefresh() { if(autoRefreshTimer){clearInterval(autoRefreshTimer);autoRefreshTimer=null;} }
+
+// ===== 数学模型（改进版） =====
+function poisson(k, lam) {
+  var f=1; for(var i=2;i<=k;i++)f*=i;
+  return Math.exp(-lam)*Math.pow(lam,k)/f;
+}
+
+function expectedGoals(eloA, eloB, homeAdv) {
+  homeAdv = homeAdv||60;
+  var d = (eloA+homeAdv-eloB)/400;
+  var winExp = 1/(1+Math.pow(10,-d));
+  // 关键改进: 场均进球随平均 Elo 浮动
+  // 顶级对决 (avg 2100) → 3.1球, 中等 (avg 1850) → 2.4球, 弱队 (avg 1650) → 1.8球
+  var avgElo = (eloA+eloB)/2;
+  var total = Math.max(1.5, 2.4 + (avgElo-1850)/350);
+  var lamA = total*winExp;
+  var lamB = total*(1-winExp);
+  return [Math.max(0.15,lamA), Math.max(0.15,lamB)];
+}
+
+function scoreMatrix(lamA, lamB, frac, baseA, baseB) {
+  frac=frac||1; baseA=baseA||0; baseB=baseB||0;
+  var m=[];
+  for(var a=0;a<=MAXG;a++){ m.push([]);
+    for(var b=0;b<=MAXG;b++){
+      var ra=a-baseA, rb=b-baseB;
+      m[a][b] = (ra<0||rb<0)?0:poisson(ra,lamA*frac)*poisson(rb,lamB*frac);
+    }
+  }
+  return m;
+}
+
+function outcome(m) {
+  var W=0,D=0,L=0;
+  for(var a=0;a<=MAXG;a++)for(var b=0;b<=MAXG;b++){
+    if(a>b)W+=m[a][b]; else if(a===b)D+=m[a][b]; else L+=m[a][b];
+  }
+  var s=W+D+L; return [W/s,D/s,L/s];
+}
+
+// ===== 渲染 =====
+function predict() {
+  var tA = document.getElementById("teamA").value;
+  var tB = document.getElementById("teamB").value;
+  if (tA===tB) { alert("请选择两支不同球队"); return; }
+
+  var eloA = TEAMS[tA]||1700, eloB = TEAMS[tB]||1700;
+  var lam = expectedGoals(eloA, eloB);
+  var lamA=lam[0], lamB=lam[1];
+
+  // Elo 信息
+  var diff = eloA-eloB;
+  var diffStr = diff>0?"主队高 "+diff+" 分":(diff<0?"客队高 "+Math.abs(diff)+" 分":"Elo 持平");
+  var diffCls = Math.abs(diff)>150?"fav":"close";
+  document.getElementById("eloInfo").innerHTML =
+    '<span>Elo: '+eloA+' vs '+eloB+'　</span>'+
+    '<span class="elo-diff '+diffCls+'">'+diffStr+'</span>'+
+    '<span style="margin-left:4px">场均进球 λ: '+lamA.toFixed(2)+' vs '+lamB.toFixed(2)+'</span>';
+
+  var live = document.getElementById("liveMode").checked;
+  var frac=1, gA=0, gB=0;
+  if (live) {
+    gA=parseInt(document.getElementById("goalsA").value)||0;
+    gB=parseInt(document.getElementById("goalsB").value)||0;
+    frac=Math.max(0,(90-(parseInt(document.getElementById("minute").value)||0))/90);
+  }
+
+  document.getElementById("liveBadge").style.display = live?"inline-block":"none";
+  var pA=tA.split(" "), pB=tB.split(" ");
+  var nameA=pA.length>1?pA[1]:pA[0], nameB=pB.length>1?pB[1]:pB[0];
+
+  document.getElementById("vsTitle").innerHTML =
+    '<span class="flag">'+tA+'</span> '+
+    (live?'<b style="color:var(--accent3)">'+gA+' : '+gB+'</b>':'vs')+
+    ' <span class="flag">'+tB+'</span>';
+
+  var m = scoreMatrix(lamA,lamB,frac,gA,gB);
+  var res = outcome(m);
+  var W=res[0],D=res[1],L=res[2];
+
+  setBar("A",W); setBar("D",D); setBar("B",L);
+  document.getElementById("lblA").textContent = nameA+" 胜";
+  document.getElementById("lblB").textContent = nameB+" 胜";
+
+  // Elo 模型结果
+  document.getElementById("eloW").textContent = (W*100).toFixed(1)+"%";
+  document.getElementById("eloD").textContent = (D*100).toFixed(1)+"%";
+  document.getElementById("eloL").textContent = (L*100).toFixed(1)+"%";
+
+  // ESPN 赔率隐含概率
+  var odds = window._currentOdds;
+  if (odds && odds.home && odds.draw && odds.away) {
+    var implied = oddsToImpliedProb(odds.home, odds.draw, odds.away);
+    if (implied) {
+      document.getElementById("oddsW").textContent = (implied[0]*100).toFixed(1)+"%";
+      document.getElementById("oddsD").textContent = (implied[1]*100).toFixed(1)+"%";
+      document.getElementById("oddsL").textContent = (implied[2]*100).toFixed(1)+"%";
+    } else {
+      document.getElementById("oddsW").textContent = "—";
+      document.getElementById("oddsD").textContent = "—";
+      document.getElementById("oddsL").textContent = "—";
+    }
+  } else {
+    document.getElementById("oddsW").textContent = "无数据";
+    document.getElementById("oddsD").textContent = "无数据";
+    document.getElementById("oddsL").textContent = "无数据";
+  }
+
+  // 存储模型概率并更新赔率面板
+  window._lastModelProbs = { W: W, D: D, L: L, matrix: m };
+  document.getElementById("oddLabelH").textContent = nameA + "胜";
+  document.getElementById("oddLabelA").textContent = nameB + "胜";
+  renderOddsPanel();
+
+  renderHeat(m);
+  renderTop(m);
+  renderEvo(lamA,lamB,gA,gB,live);
+}
+
+function setBar(k, p) {
+  document.getElementById("pct"+k).textContent = (p*100).toFixed(1)+"%";
+  document.getElementById("bar"+k).style.width = (p*100)+"%";
+}
+
+function renderHeat(m) {
+  var el=document.getElementById("heatmap");
+  el.style.gridTemplateColumns = "repeat("+(MAXG+2)+",1fr)";
+  var max=0;
+  for(var a=0;a<=MAXG;a++)for(var b=0;b<=MAXG;b++)if(m[a][b]>max)max=m[a][b];
+  var html='<div class="cell hdr"></div>';
+  for(var b=0;b<=MAXG;b++)html+='<div class="cell hdr">'+b+'</div>';
+  for(var a=0;a<=MAXG;a++){
+    html+='<div class="cell hdr">'+a+'</div>';
+    for(var b=0;b<=MAXG;b++){
+      var v=m[a][b], t=max?v/max:0;
+      var alpha=(t*0.95).toFixed(2);
+      var bg="rgba(0,229,160,"+alpha+")";
+      var style=t<0.35?"color:#8aa3b5;":"";
+      html+='<div class="cell" style="background:'+bg+";"+style+'" title="'+a+"-"+b+": "+(v*100).toFixed(2)+'%">'+(v*100).toFixed(1)+"</div>";
+    }
+  }
+  el.innerHTML=html;
+}
+
+function renderTop(m) {
+  var list=[];
+  for(var a=0;a<=MAXG;a++)for(var b=0;b<=MAXG;b++)list.push({a:a,b:b,p:m[a][b]});
+  list.sort(function(x,y){return y.p-x.p;});
+  document.getElementById("topScores").innerHTML = list.slice(0,5).map(function(s){
+    return '<div class="chip"><div class="s">'+s.a+" : "+s.b+'</div><div class="p">'+(s.p*100).toFixed(1)+"%</div></div>";
+  }).join("");
+}
+
+function renderEvo(lamA,lamB,gA,gB,live) {
+  var labels=[],dW=[],dD=[],dL=[];
+  for(var t=0;t<=90;t+=5){
+    var frac=(90-t)/90, baseA=live?gA:0, baseB=live?gB:0;
+    var res=outcome(scoreMatrix(lamA,lamB,frac,baseA,baseB));
+    labels.push(t+"'");
+    dW.push((res[0]*100).toFixed(1)); dD.push((res[1]*100).toFixed(1)); dL.push((res[2]*100).toFixed(1));
+  }
+  if(evoChart)evoChart.destroy();
+  var ctx=document.getElementById("evoChart").getContext("2d");
+  evoChart=new Chart(ctx,{
+    type:"line",
+    data:{labels:labels,datasets:[
+      {label:"主胜 %",data:dW,borderColor:"#00e5a0",backgroundColor:"rgba(0,229,160,0.08)",fill:true,tension:0.3,pointRadius:0},
+      {label:"平局 %",data:dD,borderColor:"#ffd166",backgroundColor:"rgba(255,209,102,0.08)",fill:true,tension:0.3,pointRadius:0},
+      {label:"客胜 %",data:dL,borderColor:"#ff5470",backgroundColor:"rgba(255,84,112,0.08)",fill:true,tension:0.3,pointRadius:0}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:"#8aa3b5",usePointStyle:true,padding:20}}},
+      scales:{
+        x:{title:{display:true,text:"比赛分钟",color:"#8aa3b5"},ticks:{color:"#8aa3b5",maxTicksLimit:10},grid:{color:"rgba(255,255,255,0.06)"}},
+        y:{title:{display:true,text:"概率 (%)",color:"#8aa3b5"},ticks:{color:"#8aa3b5",callback:function(v){return v+"%";}},grid:{color:"rgba(255,255,255,0.06)"},min:0,max:100}
+      },
+      interaction:{intersect:false,mode:"index"}
+    }
+  });
+}
+
+// ===== 回溯测试 =====
+function runBacktest() {
+  var el = document.getElementById("backtestBody");
+  el.innerHTML = '<div class="loading-text">抓取已完赛数据...</div>';
+
+  // 只抓有比赛的日期范围（6月11日开赛），用串行方式避免竞态
+  var dates = [];
+  for (var i = -1; i <= 1; i++) dates.push(getDateStr(i)); // 昨天/今天/明天
+
+  var allCompleted = [];
+  var errors = [];
+  var fetchLog = [];
+
+  function fetchNext(idx) {
+    if (idx >= dates.length) {
+      // 全部完成，渲染结果
+      renderBacktest(allCompleted, el, errors, fetchLog);
+      return;
+    }
+
+    var ds = dates[idx];
+    var url = ESPN_BASE + "?dates=" + ds;
+    fetchLog.push("请求: " + ds);
+
+    fetch(url)
+      .then(function(r) {
+        fetchLog.push(ds + ": HTTP " + r.status);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        var events = data.events || [];
+        fetchLog.push(ds + ": " + events.length + " 场比赛");
+        events.forEach(function(ev) {
+          try {
+            var m = parseMatch(ev);
+            if (m && m.status === "post") allCompleted.push(m);
+          } catch(e) {
+            fetchLog.push(ds + ": parseMatch error - " + e.message);
+          }
+        });
+        fetchNext(idx + 1);
+      })
+      .catch(function(err) {
+        fetchLog.push(ds + ": 失败 - " + err.message);
+        errors.push(ds + ": " + err.message);
+        fetchNext(idx + 1);
+      });
+  }
+
+  fetchNext(0);
+}
+
+function renderBacktest(matches, el, errors, fetchLog) {
+  if (matches.length===0) {
+    var msg = '<p class="note">暂无已完赛数据。</p>';
+    if (fetchLog && fetchLog.length > 0) {
+      msg += '<div style="font-size:.7rem;color:var(--muted);margin-top:4px">';
+      fetchLog.forEach(function(l) { msg += l + '<br>'; });
+      msg += '</div>';
+    }
+    if (errors && errors.length > 0) {
+      msg += '<div style="font-size:.7rem;color:var(--accent2);margin-top:4px">错误: ';
+      errors.forEach(function(e) { msg += e + '<br>'; });
+      msg += '</div>';
+    }
+    el.innerHTML = msg;
+    return;
+  }
+
+  var correct=0, brierSum=0;
+  var html = "";
+  matches.sort(function(a,b){return a.date.localeCompare(b.date);});
+
+  matches.forEach(function(m) {
+    var eloA = TEAMS[m.homeName]||1700, eloB = TEAMS[m.awayName]||1700;
+    var lam = expectedGoals(eloA,eloB);
+    var mat = scoreMatrix(lam[0],lam[1]);
+    var res = outcome(mat);
+    var W=res[0],D=res[1],L=res[2];
+
+    // 实际结果
+    var actual = m.homeScore>m.awayScore?"H":(m.homeScore===m.awayScore?"D":"A");
+    // 预测结果
+    var pred = W>D&&W>L?"H":(D>W&&D>L?"D":"A");
+    var hit = actual===pred;
+    if (hit) correct++;
+
+    // Brier 分数 (实际 vs 预测)
+    var brier = 0;
+    if (actual==="H") brier = (1-W)*(1-W)+D*D+L*L;
+    else if (actual==="D") brier = W*W+(1-D)*(1-D)+L*L;
+    else brier = W*W+D*D+(1-L)*(1-L);
+    brierSum += brier;
+
+    var pA=m.homeName.split(" "), pB=m.awayName.split(" ");
+    var sA=pA.length>1?pA[1]:pA[0], sB=pB.length>1?pB[1]:pB[0];
+
+    html += '<div class="bt-row">';
+    html += '<div class="bt-match">'+m.homeName+' vs '+m.awayName+'</div>';
+    html += '<div class="bt-result">'+m.homeScore+' : '+m.awayScore+'</div>';
+    html += '<div class="bt-pred">预测: <b class="'+(hit?'bt-hit':'bt-miss')+'">'+
+      (pred==="H"?sA+"胜":(pred==="D"?"平局":sB+"胜"))+
+      '</b> ('+sA+" "+(W*100).toFixed(0)+"% / 平 "+(D*100).toFixed(0)+"% / "+sB+" "+(L*100).toFixed(0)+"%)</div>";
+    html += '<span>'+(hit?'✓':'✗')+'</span>';
+    html += '</div>';
+  });
+
+  var acc = (correct/matches.length*100).toFixed(0);
+  var avgBrier = (brierSum/matches.length).toFixed(3);
+
+  html += '<div class="bt-summary">';
+  html += '<div class="bt-stat"><div class="val">'+correct+'/'+matches.length+'</div><div class="lbl">方向正确</div></div>';
+  html += '<div class="bt-stat"><div class="val">'+acc+'%</div><div class="lbl">准确率</div></div>';
+  html += '<div class="bt-stat"><div class="val">'+avgBrier+'</div><div class="lbl">Brier Score<br><small>(越低越好, 0=完美)</small></div></div>';
+  html += '</div>';
+  html += '<button class="small refresh" onclick="runBacktest()" style="margin-top:10px">🔄 重新检测</button>';
+
+  el.innerHTML = html;
+}
+
+// ===== 获取详细赔率（ESPN summary endpoint） =====
+function fetchDetailedOdds(eventId) {
+  var url = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=" + eventId;
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.odds && data.odds.length > 0) {
+        var o = data.odds[0];
+        // 胜平负赔率（使用 homeTeamOdds/awayTeamOdds/drawOdds）
+        var hto = o.homeTeamOdds || {};
+        var ato = o.awayTeamOdds || {};
+        var drw = o.drawOdds || {};
+        window._currentOdds = {
+          home: hto.moneyLine || null,
+          draw: drw.moneyLine || null,
+          away: ato.moneyLine || null
+        };
+        // 让球盘（spread 是让球值，spreadOdds 是赔率）
+        var spreadLine = o.spread || 0;
+        var spreadHome = spreadLine < 0 ? spreadLine : (spreadLine > 0 ? "+" + spreadLine : "0");
+        var spreadAway = spreadLine > 0 ? "-" + spreadLine : (spreadLine < 0 ? "+" + Math.abs(spreadLine) : "0");
+        window._currentSpread = {
+          homeLine: spreadHome,
+          homeOdds: hto.spreadOdds || "—",
+          awayLine: spreadAway,
+          awayOdds: ato.spreadOdds || "—"
+        };
+        // 大小球
+        window._currentTotal = {
+          overOdds: o.overOdds || "—",
+          underOdds: o.underOdds || "—"
+        };
+        renderOddsPanel();
+      }
+    })
+    .catch(function() {
+      // 降级：用 scoreboard 已有的赔率
+      renderOddsPanel();
+    });
+}
+
+// ===== 赔率面板渲染 =====
+function amToDecimal(amOdds) {
+  if (amOdds === null || amOdds === undefined || isNaN(amOdds)) return null;
+  var o = parseInt(amOdds);
+  if (o > 0) return (1 + o/100).toFixed(2);
+  else return (1 + 100/Math.abs(o)).toFixed(2);
+}
+
+function amToProb(amOdds) {
+  if (amOdds === null || amOdds === undefined || isNaN(amOdds)) return null;
+  var o = parseInt(amOdds);
+  return o > 0 ? 100/(o+100) : Math.abs(o)/(Math.abs(o)+100);
+}
+
+function renderOddsPanel() {
+  var odds = window._currentOdds;
+  var modelProbs = window._lastModelProbs; // { W, D, L, scoreMatrix }
+
+  // === 胜平负赔率 ===
+  if (odds && odds.home && odds.draw && odds.away) {
+    var h = parseInt(odds.home), d = parseInt(odds.draw), a = parseInt(odds.away);
+    document.getElementById("mlAmH").textContent = (h>0?"+"+h:h);
+    document.getElementById("mlAmD").textContent = (d>0?"+"+d:d);
+    document.getElementById("mlAmA").textContent = (a>0?"+"+a:a);
+    document.getElementById("mlDecH").textContent = amToDecimal(h);
+    document.getElementById("mlDecD").textContent = amToDecimal(d);
+    document.getElementById("mlDecA").textContent = amToDecimal(a);
+    var ph=amToProb(h), pd=amToProb(d), pa=amToProb(a);
+    var total = ph+pd+pa;
+    document.getElementById("mlProbH").textContent = (ph/total*100).toFixed(1)+"%";
+    document.getElementById("mlProbD").textContent = (pd/total*100).toFixed(1)+"%";
+    document.getElementById("mlProbA").textContent = (pa/total*100).toFixed(1)+"%";
+    document.getElementById("overround").textContent = ((total-1)*100).toFixed(1)+"%";
+  } else {
+    var ids = ["mlAmH","mlAmD","mlAmA","mlDecH","mlDecD","mlDecA","mlProbH","mlProbD","mlProbA"];
+    ids.forEach(function(id) { document.getElementById(id).textContent = "—"; });
+    document.getElementById("overround").textContent = "—";
+  }
+
+  // === 让球盘 ===
+  if (window._currentSpread) {
+    var sp = window._currentSpread;
+    document.getElementById("spreadH").textContent = (sp.homeLine||"") + " @" + sp.homeOdds;
+    document.getElementById("spreadA").textContent = (sp.awayLine||"") + " @" + sp.awayOdds;
+  } else {
+    document.getElementById("spreadH").textContent = "—";
+    document.getElementById("spreadA").textContent = "—";
+  }
+
+  // === 大小球 ===
+  if (window._currentTotal) {
+    var tot = window._currentTotal;
+    document.getElementById("overOdds").textContent = tot.overOdds || "—";
+    document.getElementById("underOdds").textContent = tot.underOdds || "—";
+  } else {
+    document.getElementById("overOdds").textContent = "—";
+    document.getElementById("underOdds").textContent = "—";
+  }
+
+  // === 比分赔率（泊松模型公平赔率） ===
+  var grid = document.getElementById("scoreOddsGrid");
+  if (modelProbs && modelProbs.matrix) {
+    var m = modelProbs.matrix;
+    var items = [];
+    for (var a=0;a<=MAXG;a++) for (var b=0;b<=MAXG;b++) {
+      if (m[a][b] > 0.002) { // 只显示概率>0.2%的
+        items.push({a:a, b:b, p:m[a][b]});
+      }
+    }
+    items.sort(function(x,y){return y.p-x.p;});
+    items = items.slice(0, 24); // 最多24个
+    var html = "";
+    items.forEach(function(s) {
+      var fairOdds = s.p > 0 ? (1/s.p).toFixed(1) : "∞";
+      var cls = parseFloat(fairOdds) > 15 ? " alt" : "";
+      html += '<div class="score-odds-item'+cls+'"><div class="sc">'+s.a+":"+s.b+'</div><div class="od">@'+fairOdds+'</div></div>';
+    });
+    grid.innerHTML = html;
+  } else {
+    grid.innerHTML = '<div style="font-size:.7rem;color:var(--muted);padding:8px">暂无数据</div>';
+  }
+
+  // 更新刷新时间
+  var t = new Date().toLocaleTimeString();
+  document.getElementById("oddsRefreshTime").textContent = "更新于 " + t;
+}
+
+// ===== 初始化 =====
+(function init() {
+  var selA=document.getElementById("teamA"), selB=document.getElementById("teamB");
+  Object.keys(TEAMS).sort().forEach(function(t){ selA.add(new Option(t,t)); selB.add(new Option(t,t)); });
+  selA.value="🇦🇷 阿根廷"; selB.value="🇫🇷 法国";
+
+  document.getElementById("liveMode").onchange=function(e){
+    document.getElementById("livePanel").style.display=e.target.checked?"block":"none";
+  };
+  document.getElementById("minute").oninput=function(e){
+    document.getElementById("minLabel").textContent=e.target.value;
+  };
+
+  currentDateStr=getDateStr(0);
+  document.getElementById("dayLabel").textContent=getDateDisplay(currentDateStr);
+  loadMatches();
+  startAutoRefresh();
+  predict();
+
+  // 自动加载回溯测试（延迟等赛程数据先到）
+  setTimeout(function() { runBacktest(); }, 1500);
+})();
+</script>
+</body>
+</html>
